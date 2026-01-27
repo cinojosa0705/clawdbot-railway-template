@@ -625,9 +625,13 @@ app.post("/setup/api/fix-proxy", requireSetupAuth, async (_req, res) => {
   try {
     const results = [];
 
-    // Set trusted proxies for Railway
+    // Set trusted proxies for Railway - try multiple possible config paths
     const r1 = await runCmd(CLAWDBOT_NODE, clawArgs(["config", "set", "--json", "gateway.trustedProxies", JSON.stringify(["loopback", "uniquelocal"])]));
-    results.push(`trustedProxies: exit=${r1.code} ${r1.output}`);
+    results.push(`gateway.trustedProxies: exit=${r1.code} ${r1.output}`);
+
+    // Also try the top-level trustedProxies in case that's where it's expected
+    const r1b = await runCmd(CLAWDBOT_NODE, clawArgs(["config", "set", "--json", "trustedProxies", JSON.stringify(["loopback", "uniquelocal"])]));
+    results.push(`trustedProxies: exit=${r1b.code} ${r1b.output}`);
 
     // Ensure token auth is configured
     const r2 = await runCmd(CLAWDBOT_NODE, clawArgs(["config", "set", "gateway.auth.mode", "token"]));
@@ -643,6 +647,16 @@ app.post("/setup/api/fix-proxy", requireSetupAuth, async (_req, res) => {
     res.json({ ok: true, output: results.join("\n") });
   } catch (err) {
     res.status(500).json({ ok: false, output: String(err) });
+  }
+});
+
+app.get("/setup/api/config", requireSetupAuth, async (_req, res) => {
+  // Read and return the current config for debugging
+  try {
+    const configContent = fs.readFileSync(configPath(), "utf8");
+    res.json({ ok: true, path: configPath(), config: JSON.parse(configContent) });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: String(err) });
   }
 });
 
