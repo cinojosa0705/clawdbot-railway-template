@@ -478,6 +478,8 @@ app.post("/setup/api/run", requireSetupAuth, async (req, res) => {
     await runCmd(CLAWDBOT_NODE, clawArgs(["config", "set", "gateway.auth.token", CLAWDBOT_GATEWAY_TOKEN]));
     await runCmd(CLAWDBOT_NODE, clawArgs(["config", "set", "gateway.bind", "loopback"]));
     await runCmd(CLAWDBOT_NODE, clawArgs(["config", "set", "gateway.port", String(INTERNAL_GATEWAY_PORT)]));
+    // Trust Railway's proxy so the gateway accepts forwarded headers and doesn't require pairing
+    await runCmd(CLAWDBOT_NODE, clawArgs(["config", "set", "--json", "gateway.trustedProxies", JSON.stringify(["loopback", "uniquelocal"])]));
 
     const channelsHelp = await runCmd(CLAWDBOT_NODE, clawArgs(["channels", "add", "--help"]));
     const helpText = channelsHelp.output || "";
@@ -603,6 +605,32 @@ app.post("/setup/api/reset", requireSetupAuth, async (_req, res) => {
     res.type("text/plain").send("OK - deleted config file. You can rerun setup now.");
   } catch (err) {
     res.status(500).type("text/plain").send(String(err));
+  }
+});
+
+app.post("/setup/api/fix-proxy", requireSetupAuth, async (_req, res) => {
+  // Apply trusted proxy settings to existing config without full reset
+  try {
+    const results = [];
+
+    // Set trusted proxies for Railway
+    const r1 = await runCmd(CLAWDBOT_NODE, clawArgs(["config", "set", "--json", "gateway.trustedProxies", JSON.stringify(["loopback", "uniquelocal"])]));
+    results.push(`trustedProxies: exit=${r1.code} ${r1.output}`);
+
+    // Ensure token auth is configured
+    const r2 = await runCmd(CLAWDBOT_NODE, clawArgs(["config", "set", "gateway.auth.mode", "token"]));
+    results.push(`auth.mode: exit=${r2.code}`);
+
+    const r3 = await runCmd(CLAWDBOT_NODE, clawArgs(["config", "set", "gateway.auth.token", CLAWDBOT_GATEWAY_TOKEN]));
+    results.push(`auth.token: exit=${r3.code}`);
+
+    // Restart gateway to pick up changes
+    await restartGateway();
+    results.push("Gateway restarted");
+
+    res.json({ ok: true, output: results.join("\n") });
+  } catch (err) {
+    res.status(500).json({ ok: false, output: String(err) });
   }
 });
 
