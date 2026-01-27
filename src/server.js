@@ -124,6 +124,7 @@ async function startGateway() {
       ...process.env,
       CLAWDBOT_STATE_DIR: STATE_DIR,
       CLAWDBOT_WORKSPACE_DIR: WORKSPACE_DIR,
+      CLAWDBOT_CONFIG_PATH: configPath(),
     },
   });
 
@@ -159,6 +160,7 @@ async function ensureGatewayRunning() {
 }
 
 async function restartGateway() {
+  // Kill any existing gateway process we're tracking
   if (gatewayProc) {
     try {
       gatewayProc.kill("SIGTERM");
@@ -166,9 +168,18 @@ async function restartGateway() {
       // ignore
     }
     // Give it a moment to exit and release the port.
-    await sleep(750);
+    await sleep(2000);
     gatewayProc = null;
   }
+
+  // Also try to stop any gateway that might be running independently
+  try {
+    await runCmd(CLAWDBOT_NODE, clawArgs(["gateway", "stop"]));
+    await sleep(1000);
+  } catch {
+    // ignore - gateway stop may fail if not running
+  }
+
   return ensureGatewayRunning();
 }
 
@@ -426,6 +437,7 @@ function runCmd(cmd, args, opts = {}) {
         ...process.env,
         CLAWDBOT_STATE_DIR: STATE_DIR,
         CLAWDBOT_WORKSPACE_DIR: WORKSPACE_DIR,
+        CLAWDBOT_CONFIG_PATH: configPath(),
       },
     });
 
