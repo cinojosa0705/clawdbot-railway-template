@@ -114,6 +114,10 @@ async function startGateway() {
     CLAWDBOT_GATEWAY_TOKEN,
   ];
 
+  console.log(`[gateway] Starting: ${CLAWDBOT_NODE} ${clawArgs(args).join(" ")}`);
+  console.log(`[gateway] Config path: ${configPath()}`);
+  console.log(`[gateway] Config exists: ${fs.existsSync(configPath())}`);
+
   gatewayProc = childProcess.spawn(CLAWDBOT_NODE, clawArgs(args), {
     stdio: "inherit",
     env: {
@@ -122,6 +126,8 @@ async function startGateway() {
       CLAWDBOT_WORKSPACE_DIR: WORKSPACE_DIR,
     },
   });
+
+  console.log(`[gateway] Spawned with PID: ${gatewayProc.pid}`);
 
   gatewayProc.on("error", (err) => {
     console.error(`[gateway] spawn error: ${String(err)}`);
@@ -439,7 +445,17 @@ function runCmd(cmd, args, opts = {}) {
 app.post("/setup/api/run", requireSetupAuth, async (req, res) => {
   try {
     if (isConfigured()) {
-      await ensureGatewayRunning();
+      console.log("[/setup/api/run] Already configured, ensuring gateway is running...");
+      try {
+        await ensureGatewayRunning();
+        console.log("[/setup/api/run] Gateway is running");
+      } catch (gwErr) {
+        console.error("[/setup/api/run] Gateway failed to start:", gwErr);
+        return res.status(500).json({
+          ok: false,
+          output: `Already configured but gateway failed to start:\n${String(gwErr)}\n\nTry "Reset setup" and run again, or check Railway logs for [gateway] errors.`
+        });
+      }
       return res.json({ ok: true, output: "Already configured.\nUse Reset setup if you want to rerun onboarding.\n" });
     }
 
