@@ -68,9 +68,9 @@ function configPath() {
   // Prioritize moltbot.json since the CLI now writes to that after the Clawdbot → Moltbot rename.
   const moltbotPath = path.join(STATE_DIR, "moltbot.json");
   const clawdbotPath = path.join(STATE_DIR, "clawdbot.json");
-  
+
   if (fs.existsSync(moltbotPath)) return moltbotPath;
-  
+
   // Fall back to clawdbot.json for backward compatibility (if it exists) or as the default path
   return clawdbotPath;
 }
@@ -597,11 +597,15 @@ app.post("/setup/api/pairing/approve", requireSetupAuth, async (req, res) => {
 });
 
 app.post("/setup/api/reset", requireSetupAuth, async (_req, res) => {
-  // Minimal reset: delete the config file so /setup can rerun.
+  // Minimal reset: delete both config files so /setup can rerun.
   // Keep credentials/sessions/workspace by default.
   try {
-    fs.rmSync(configPath(), { force: true });
-    res.type("text/plain").send("OK - deleted config file. You can rerun setup now.");
+    // Delete both moltbot.json and clawdbot.json to ensure a clean reset
+    const moltbotPath = path.join(STATE_DIR, "moltbot.json");
+    const clawdbotPath = path.join(STATE_DIR, "clawdbot.json");
+    fs.rmSync(moltbotPath, { force: true });
+    fs.rmSync(clawdbotPath, { force: true });
+    res.type("text/plain").send("OK - deleted config files. You can rerun setup now.");
   } catch (err) {
     res.status(500).type("text/plain").send(String(err));
   }
