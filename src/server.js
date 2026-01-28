@@ -101,22 +101,24 @@ async function startGateway() {
   fs.mkdirSync(STATE_DIR, { recursive: true });
   fs.mkdirSync(WORKSPACE_DIR, { recursive: true });
 
+  // Use minimal command-line args - let config file handle most settings
+  // This ensures trustedProxies from config is respected
   const args = [
     "gateway",
     "run",
-    "--bind",
-    "loopback",
-    "--port",
-    String(INTERNAL_GATEWAY_PORT),
-    "--auth",
-    "token",
-    "--token",
-    CLAWDBOT_GATEWAY_TOKEN,
   ];
 
   console.log(`[gateway] Starting: ${CLAWDBOT_NODE} ${clawArgs(args).join(" ")}`);
   console.log(`[gateway] Config path: ${configPath()}`);
   console.log(`[gateway] Config exists: ${fs.existsSync(configPath())}`);
+
+  // Log the gateway config section for debugging
+  try {
+    const cfg = JSON.parse(fs.readFileSync(configPath(), "utf8"));
+    console.log(`[gateway] Config gateway section:`, JSON.stringify(cfg.gateway, null, 2));
+  } catch (e) {
+    console.log(`[gateway] Could not read config:`, e.message);
+  }
 
   gatewayProc = childProcess.spawn(CLAWDBOT_NODE, clawArgs(args), {
     stdio: "inherit",
