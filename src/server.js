@@ -83,7 +83,12 @@ async function waitForGatewayReady(opts = {}) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     try {
-      const res = await fetch(`${GATEWAY_TARGET}/clawdbot`, { method: "GET" });
+      const res = await fetch(`${GATEWAY_TARGET}/clawdbot`, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${CLAWDBOT_GATEWAY_TOKEN}`,
+        },
+      });
       // Any HTTP response means the port is open.
       if (res) return true;
     } catch {
@@ -649,6 +654,16 @@ const proxy = httpProxy.createProxyServer({
 
 proxy.on("error", (err, _req, _res) => {
   console.error("[proxy]", err);
+});
+
+// Inject authentication token into all proxied HTTP requests
+proxy.on("proxyReq", (proxyReq, _req, _res) => {
+  proxyReq.setHeader("Authorization", `Bearer ${CLAWDBOT_GATEWAY_TOKEN}`);
+});
+
+// Inject authentication token into WebSocket proxy requests
+proxy.on("proxyReqWs", (proxyReq, _req, _socket, _options, _head) => {
+  proxyReq.setHeader("Authorization", `Bearer ${CLAWDBOT_GATEWAY_TOKEN}`);
 });
 
 app.use(async (req, res) => {
