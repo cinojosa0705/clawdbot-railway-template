@@ -517,9 +517,11 @@ app.post("/setup/api/run", requireSetupAuth, async (req, res) => {
       } else {
         // Avoid `channels add` here (it has proven flaky across builds); write config directly.
         const token = payload.telegramToken.trim();
+        // Use dmPolicy: "allowlist" instead of "pairing" since Telegram doesn't support the pairing CLI flow
         const cfgObj = {
           enabled: true,
-          dmPolicy: "pairing",
+          dmPolicy: "allowlist",
+          dmAllowlist: [],  // Empty = allow all DMs. Add specific user IDs to restrict.
           botToken: token,
           groupPolicy: "allowlist",
           streamMode: "partial",
@@ -683,6 +685,39 @@ app.get("/setup/api/config", requireSetupAuth, async (_req, res) => {
     res.json({ ok: true, path: configPath(), config: JSON.parse(configContent) });
   } catch (err) {
     res.status(500).json({ ok: false, error: String(err) });
+  }
+});
+
+app.post("/setup/api/fix-telegram", requireSetupAuth, async (req, res) => {
+  // Fix Telegram config to use allowlist instead of pairing (which isn't supported)
+  // Requires a user ID to be passed in the request body for security
+  try {
+    const { userId } = req.body || {};
+
+    if (!userId) {
+      return res.status(400).json({
+        ok: false,
+        output: "Missing userId in request body. Get your Telegram user ID by messaging @userinfobot on Telegram, then call this endpoint with: { \"userId\": \"YOUR_ID\" }"
+      });
+    }
+
+    const results = [];
+
+    // Change dmPolicy from "pairing" to "allowlist"
+    const r1 = await runCmd(CLAWDBOT_NODE, clawArgs(["config", "set", "channels.telegram.dmPolicy", "allowlist"]));
+    results.push(`dmPolicy: exit=${r1.code} ${r1.output}`);
+
+    // Add your user ID to the allowlist (only you can DM the bot)
+    const r2 = await runCmd(CLAWDBOT_NODE, clawArgs(["config", "set", "--json", "channels.telegram.dmAllowlist", JSON.stringify([String(userId)])]));
+    results.push(`dmAllowlist: exit=${r2.code} ${r2.output}`);
+
+    // Restart gateway to pick up changes
+    await restartGateway();
+    results.push("Gateway restarted");
+
+    res.json({ ok: true, output: results.join("\n") });
+  } catch (err) {
+    res.status(500).json({ ok: false, output: String(err) });
   }
 });
 
