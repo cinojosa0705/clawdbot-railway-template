@@ -656,8 +656,13 @@ proxy.on("error", (err, _req, _res) => {
   console.error("[proxy]", err);
 });
 
-// Inject authentication token into all proxied requests
+// Inject authentication token into all proxied HTTP requests
 proxy.on("proxyReq", (proxyReq, _req, _res) => {
+  proxyReq.setHeader("Authorization", `Bearer ${CLAWDBOT_GATEWAY_TOKEN}`);
+});
+
+// Inject authentication token into WebSocket proxy requests
+proxy.on("proxyReqWs", (proxyReq, _req, _socket, _options, _head) => {
   proxyReq.setHeader("Authorization", `Bearer ${CLAWDBOT_GATEWAY_TOKEN}`);
 });
 
@@ -701,8 +706,6 @@ server.on("upgrade", async (req, socket, head) => {
     socket.destroy();
     return;
   }
-  // Inject authentication token for WebSocket upgrade
-  req.headers.authorization = `Bearer ${CLAWDBOT_GATEWAY_TOKEN}`;
   proxy.ws(req, socket, head, { target: GATEWAY_TARGET });
 });
 
