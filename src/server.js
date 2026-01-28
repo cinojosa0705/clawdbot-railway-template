@@ -60,7 +60,19 @@ function clawArgs(args) {
 }
 
 function configPath() {
-  return process.env.CLAWDBOT_CONFIG_PATH?.trim() || path.join(STATE_DIR, "clawdbot.json");
+  // Check for explicit config path override first
+  const explicitPath = process.env.CLAWDBOT_CONFIG_PATH?.trim();
+  if (explicitPath) return explicitPath;
+
+  // Check for both new (moltbot.json) and legacy (clawdbot.json) config filenames.
+  // Prioritize moltbot.json since the CLI now writes to that after the Clawdbot → Moltbot rename.
+  const moltbotPath = path.join(STATE_DIR, "moltbot.json");
+  const clawdbotPath = path.join(STATE_DIR, "clawdbot.json");
+
+  if (fs.existsSync(moltbotPath)) return moltbotPath;
+
+  // Fall back to clawdbot.json for backward compatibility (if it exists) or as the default path
+  return clawdbotPath;
 }
 
 function isConfigured() {
@@ -83,7 +95,12 @@ async function waitForGatewayReady(opts = {}) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     try {
-      const res = await fetch(`${GATEWAY_TARGET}/clawdbot`, { method: "GET" });
+      const res = await fetch(`${GATEWAY_TARGET}/clawdbot`, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${CLAWDBOT_GATEWAY_TOKEN}`,
+        },
+      });
       // Any HTTP response means the port is open.
       if (res) return true;
     } catch {
@@ -625,11 +642,15 @@ app.post("/setup/api/pairing/approve", requireSetupAuth, async (req, res) => {
 });
 
 app.post("/setup/api/reset", requireSetupAuth, async (_req, res) => {
-  // Minimal reset: delete the config file so /setup can rerun.
+  // Minimal reset: delete both config files so /setup can rerun.
   // Keep credentials/sessions/workspace by default.
   try {
-    fs.rmSync(configPath(), { force: true });
-    res.type("text/plain").send("OK - deleted config file. You can rerun setup now.");
+    // Delete both moltbot.json and clawdbot.json to ensure a clean reset
+    const moltbotPath = path.join(STATE_DIR, "moltbot.json");
+    const clawdbotPath = path.join(STATE_DIR, "clawdbot.json");
+    fs.rmSync(moltbotPath, { force: true });
+    fs.rmSync(clawdbotPath, { force: true });
+    res.type("text/plain").send("OK - deleted config files. You can rerun setup now.");
   } catch (err) {
     res.status(500).type("text/plain").send(String(err));
   }
@@ -780,6 +801,16 @@ const proxy = httpProxy.createProxyServer({
 
 proxy.on("error", (err, _req, _res) => {
   console.error("[proxy]", err);
+});
+
+// Inject authentication token into all proxied HTTP requests
+proxy.on("proxyReq", (proxyReq, _req, _res) => {
+  proxyReq.setHeader("Authorization", `Bearer ${CLAWDBOT_GATEWAY_TOKEN}`);
+});
+
+// Inject authentication token into WebSocket proxy requests
+proxy.on("proxyReqWs", (proxyReq, _req, _socket, _options, _head) => {
+  proxyReq.setHeader("Authorization", `Bearer ${CLAWDBOT_GATEWAY_TOKEN}`);
 });
 
 app.use(async (req, res) => {
