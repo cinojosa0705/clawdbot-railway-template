@@ -493,7 +493,18 @@ app.post("/setup/api/run", requireSetupAuth, async (req, res) => {
     await runCmd(CLAWDBOT_NODE, clawArgs(["config", "set", "gateway.bind", "loopback"]));
     await runCmd(CLAWDBOT_NODE, clawArgs(["config", "set", "gateway.port", String(INTERNAL_GATEWAY_PORT)]));
     // Trust Railway's proxy so the gateway accepts forwarded headers and doesn't require pairing
-    await runCmd(CLAWDBOT_NODE, clawArgs(["config", "set", "--json", "gateway.trustedProxies", JSON.stringify(["loopback", "uniquelocal"])]));
+    // Use explicit CIDR ranges instead of named shortcuts
+    const trustedProxies = [
+      "127.0.0.0/8",
+      "10.0.0.0/8",
+      "172.16.0.0/12",
+      "192.168.0.0/16",
+      "100.64.0.0/10",
+      "::1/128",
+      "fc00::/7",
+      "fd00::/8"
+    ];
+    await runCmd(CLAWDBOT_NODE, clawArgs(["config", "set", "--json", "gateway.trustedProxies", JSON.stringify(trustedProxies)]));
 
     const channelsHelp = await runCmd(CLAWDBOT_NODE, clawArgs(["channels", "add", "--help"]));
     const helpText = channelsHelp.output || "";
@@ -627,8 +638,21 @@ app.post("/setup/api/fix-proxy", requireSetupAuth, async (_req, res) => {
   try {
     const results = [];
 
-    // Set trusted proxies for Railway - try multiple possible config paths
-    const r1 = await runCmd(CLAWDBOT_NODE, clawArgs(["config", "set", "--json", "gateway.trustedProxies", JSON.stringify(["loopback", "uniquelocal"])]));
+    // Set trusted proxies for Railway - use explicit CIDR ranges
+    // 127.0.0.0/8 = loopback, 10.0.0.0/8 + 172.16.0.0/12 + 192.168.0.0/16 = private networks
+    // 100.64.0.0/10 = Railway's internal network (CGNAT range)
+    // fc00::/7 = IPv6 unique local
+    const trustedProxies = [
+      "127.0.0.0/8",
+      "10.0.0.0/8",
+      "172.16.0.0/12",
+      "192.168.0.0/16",
+      "100.64.0.0/10",
+      "::1/128",
+      "fc00::/7",
+      "fd00::/8"
+    ];
+    const r1 = await runCmd(CLAWDBOT_NODE, clawArgs(["config", "set", "--json", "gateway.trustedProxies", JSON.stringify(trustedProxies)]));
     results.push(`gateway.trustedProxies: exit=${r1.code} ${r1.output}`);
 
     // Also try the top-level trustedProxies in case that's where it's expected
