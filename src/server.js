@@ -83,7 +83,12 @@ async function waitForGatewayReady(opts = {}) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     try {
-      const res = await fetch(`${GATEWAY_TARGET}/clawdbot`, { method: "GET" });
+      const res = await fetch(`${GATEWAY_TARGET}/clawdbot`, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${CLAWDBOT_GATEWAY_TOKEN}`,
+        },
+      });
       // Any HTTP response means the port is open.
       if (res) return true;
     } catch {
